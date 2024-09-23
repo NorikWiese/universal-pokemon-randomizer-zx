@@ -45,6 +45,8 @@ import com.dabomstew.pkrandom.exceptions.RandomizerIOException;
 import com.dabomstew.pkrandom.newnds.NARCArchive;
 import compressors.DSDecmp;
 
+import static com.dabomstew.pkrandom.Settings.effectivenessUpdateStyle.*;
+
 public class Gen5RomHandler extends AbstractDSRomHandler {
 
     public static class Factory extends RomHandler.Factory {
@@ -2529,20 +2531,91 @@ public class Gen5RomHandler extends AbstractDSRomHandler {
     }
 
     private void updateTypeEffectiveness() {
+        Settings.effectivenessUpdateStyle style = RANDOM_SANE;
+
         try {
             byte[] battleOverlay = readOverlay(romEntry.getInt("BattleOvlNumber"));
             int typeEffectivenessTableOffset = find(battleOverlay, Gen5Constants.typeEffectivenessTableLocator);
             if (typeEffectivenessTableOffset > 0) {
                 Effectiveness[][] typeEffectivenessTable = readTypeEffectivenessTable(battleOverlay, typeEffectivenessTableOffset);
+                Effectiveness[][] gen6EffectivenessTable = Effectiveness.getGen6Table();
+                Map<Type, Byte> typeByteCodes = new HashMap<Type, Byte>();
+
+                for (Type type : Type.getAllTypes(5)) {
+                    typeByteCodes.put(type, Gen5Constants.typeToByte(type));
+                }
+
                 log("--Updating Type Effectiveness--");
-                int steel = Gen5Constants.typeToByte(Type.STEEL);
-                int dark = Gen5Constants.typeToByte(Type.DARK);
-                int ghost = Gen5Constants.typeToByte(Type.GHOST);
-                typeEffectivenessTable[ghost][steel] = Effectiveness.NEUTRAL;
-                log("Replaced: Ghost not very effective vs Steel => Ghost neutral vs Steel");
-                typeEffectivenessTable[dark][steel] = Effectiveness.NEUTRAL;
-                log("Replaced: Dark not very effective vs Steel => Dark neutral vs Steel");
-                logBlankLine();
+                switch (style) {
+                    case UPDATE_TO_GEN_6:
+                        typeEffectivenessTable[typeByteCodes.get(Type.GHOST)][typeByteCodes.get(Type.STEEL)] = Effectiveness.NEUTRAL;
+                        log("Replaced: Ghost not very effective vs Steel => Ghost neutral vs Steel");
+                        typeEffectivenessTable[typeByteCodes.get(Type.DARK)][typeByteCodes.get(Type.STEEL)] = Effectiveness.NEUTRAL;
+                        log("Replaced: Dark not very effective vs Steel => Dark neutral vs Steel");
+                        break;
+                    case REVERSED:
+                        for (Type x : Type.getAllTypes(5)) {
+                            for (Type y : Type.getAllTypes(5)) {
+                                typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] = gen6EffectivenessTable[y.ordinal()][x.ordinal()];
+                            }
+                        }
+                        log("Reversed Type Effectiveness Chart");
+                        break;
+                    case RANDOM_SANE:
+                        Map<Type, Type> typeTranslation = new HashMap<Type, Type>();
+                        for (Type x : Type.getAllTypes(5)) {
+                            typeTranslation.put(x, x);
+                        }
+                        List<Type> types = Type.getAllTypes(5);
+                        for (int i = 0; i < 25; i++) {
+                            Type first = types.get(random.nextInt(types.size()));
+                            Type second = types.get(random.nextInt(types.size()));
+                            Type temp = typeTranslation.get(first);
+                            typeTranslation.replace(first, typeTranslation.get(second));
+                            typeTranslation.replace(second, temp);
+                        }
+                        log(typeTranslation.toString());
+                        logBlankLine();
+
+                        for (Type x : Type.getAllTypes(5)) {
+                            for (Type y : Type.getAllTypes(5)) {
+                                typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] =
+                                        gen6EffectivenessTable
+                                                [typeTranslation.get(x).ordinal()]
+                                                [typeTranslation.get(y).ordinal()];
+                                log("updated " + x + " => " + y + " to " + typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)]);
+                            }
+                        }
+                        logBlankLine();
+
+                        break;
+                    case RANDOM_INSANE:
+                        log("Randomized Type Effectiveness:");
+                        for (Type x : Type.getAllTypes(5)) {
+                            for (Type y : Type.getAllTypes(5)) {
+                                int i = 1 + random.nextInt(289);
+                                if (i <= 181) {
+                                    typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] = Effectiveness.NEUTRAL;
+                                    log(x.toString() + " => " + y.toString() + ": neutral");
+                                }
+                                else if (i <= 181+46) {
+                                    typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] = Effectiveness.HALF;
+                                    log(x.toString() + " => " + y.toString() + ": not very effective");
+                                }
+                                else if (i <= 181+46+55) {
+                                    typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] = Effectiveness.DOUBLE;
+                                    log(x.toString() + " => " + y.toString() + ": very effective");
+                                }
+                                else {
+                                    typeEffectivenessTable[typeByteCodes.get(x)][typeByteCodes.get(y)] = Effectiveness.ZERO;
+                                    log(x.toString() + " => " + y.toString() + ": useless");
+                                }
+                            }
+                        }
+                        logBlankLine();
+                        break;
+                }
+
                 writeTypeEffectivenessTable(typeEffectivenessTable, battleOverlay, typeEffectivenessTableOffset);
                 writeOverlay(romEntry.getInt("BattleOvlNumber"), battleOverlay);
                 effectivenessUpdated = true;

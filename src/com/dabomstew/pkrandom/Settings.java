@@ -261,6 +261,10 @@ public class Settings {
         UNCHANGED, RANDOM_PREFER_TYPE, COMPLETELY_RANDOM, FULL
     }
 
+    public enum effectivenessUpdateStyle {
+        UPDATE_TO_GEN_6, REVERSED, RANDOM_SANE, RANDOM_INSANE
+    }
+
     private TMsHMsCompatibilityMod tmsHmsCompatibilityMod = TMsHMsCompatibilityMod.UNCHANGED;
 
     public enum MoveTutorMovesMod {
